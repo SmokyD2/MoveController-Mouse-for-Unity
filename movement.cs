@@ -2,39 +2,103 @@ using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 
-public class movement : MonoBehaviour
+public class PlayerControl : MonoBehaviour
 {
-    private Animator animator;
-    public float Force;
     public CharacterController controller;
-    public float smoothTime;
-    float smoothVelocity;
-    public Transform firstCamera;
+    public Transform groundCheck;
+    public LayerMask groundMask;
+    public AudioClip jumpSound, landingSound, movingSound, healthPickupSound, hurtSound;
+    public AudioSource audioSrc;
+    public Camera fpsCamera;
 
-    private void Start()
+    public int maxHealth = 50;
+    [HideInInspector] public int health;
+    public float groundDistance = 0.4f;
+    public float speed = 12f;
+    public float gravity = -9.81f;
+    public float jumpHeight = 3f;
+
+
+    Vector3 velocity;
+    Vector3 startPosition;
+    bool isOnGround;
+    bool isOnGroundLastFrame = false;
+
+    // первая проверка
+    void Start()
     {
-        animator = GetComponent<Animator>();
+        startPosition = transform.position;
+        health = maxHealth;
     }
 
-    private void Update()
+    // Постоянная проверка
+    void Update()
     {
-        float horizontal = Input.GetAxisRaw("Horizontal");
-        float vertical = Input.GetAxisRaw("Vertical");
-        Vector3 direction = new Vector3(horizontal, 0f, vertical).normalized;
 
-        if(direction.magnitude >= 1f)
+        isOnGround = Physics.CheckSphere(groundCheck.position, groundDistance, groundMask);
+
+        if (isOnGround && velocity.y < 0f)
         {
-            float rotationAngle = Mathf.Atan2(direction.x, direction.z) * Mathf.Rad2Deg;
-            float angle = Mathf.SmoothDampAngle(transform.eulerAngles.y, rotationAngle, ref smoothVelocity, smoothTime);
-            transform.rotation = Quaternion.Euler(0f, rotationAngle, 0f);
-            Vector3 move = Quaternion.Euler(0f, rotationAngle, 0f) * Vector3.forward;
-            controller.Move(direction * Force * Time.deltaTime);
-            
+            velocity.y = -2f;
+
         }
 
-        if(direction.magnitude <= 0.1f)
+        if (isOnGround == true && isOnGroundLastFrame == false)
         {
-            animator.SetBool("walking", true);
+            audioSrc.PlayOneShot(movingSound);
+        }
+        isOnGroundLastFrame = isOnGround;
+        if (isOnGround && velocity.y <= 0f && Input.GetButtonDown("Jump"))
+        {
+            velocity.y = Mathf.Sqrt(jumpHeight * -2f * gravity);
+            audioSrc.PlayOneShot(jumpSound);
+        }
+
+
+
+        float x = Input.GetAxis("Horizontal");
+        float z = Input.GetAxis("Vertical");
+        Vector3 motion = transform.right * x + transform.forward * z;
+        controller.Move(motion * speed * Time.deltaTime);
+
+
+
+        if (isOnGround && controller.velocity.magnitude > 2f && audioSrc.isPlaying == false)
+        {
+            audioSrc.PlayOneShot(movingSound);
+        }
+
+        velocity.y += gravity * Time.deltaTime;
+        controller.Move(velocity * Time.deltaTime);
+
+        if (transform.position.y < -10)
+        {
+            transform.position = startPosition;
+        }
+
+
+    }
+
+    private void OnTriggerEnter(Collider other)
+    {
+        //Под дебуг;
+        if (other.CompareTag("Health"))
+        {
+            if (health < maxHealth)
+            {
+                health = maxHealth;
+                audioSrc.PlayOneShot(healthPickupSound);
+                Destroy(other.gameObject);
+            }
+        }
+        else if (other.CompareTag("Enemy"))
+        {
+            audioSrc.PlayOneShot(hurtSound);
+            StartCoroutine(fpsCamera.GetComponent<MouseLook>().CameraShake(0.15f, 1f));
         }
     }
+
+
 }
+
+
